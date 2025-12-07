@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Cake Cutting with Popper Celebration</title>
+<style>
+:root{
+  --bg:#f1f7c4;
+  --cake:#e76b6b;
+  --frost:#be1818;
+  --plate:#e97272;
+  --accent:#c63;
+  --ui:#333;
+  --maxWidth:880px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,Roboto,Arial;color:var(--ui)}
+.wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;padding:18px;gap:14px}
+.stage{width:100%;max-width:var(--maxWidth);aspect-ratio: 4/3;position:relative}
+svg{width:100%;height:100%;display:block}
+
+/* Controls */
+.controls{display:flex;gap:10px;align-items:center;justify-content:center}
+button{background:#222;color:white;border:0;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer}
+button.secondary{background:transparent;color:var(--ui);border:1px solid rgba(0,0,0,.07)}
+
+.hint{font-size:13px;color:#444;text-align:center;max-width:var(--maxWidth)}
+
+/* Floating draggable piece */
+.piece{
+  position:fixed;
+  z-index:60;
+  display:flex;align-items:center;justify-content:center;
+  width:64px;height:64px;border-radius:12px;
+  background:linear-gradient(180deg,#fff7f7,#fff0f2);
+  box-shadow:0 8px 18px rgba(0,0,0,0.12);
+  cursor:grab; user-select:none; touch-action:none;
+  transition:transform .12s ease;
+}
+.piece .emoji{font-size:30px;line-height:1}
+.piece .sprinkles{position:absolute;left:6px;top:6px;font-size:14px;transform:rotate(-10deg);opacity:.95}
+
+/* lips at top center */
+#lips{
+  position:fixed;
+  top:8px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:70;
+  display:flex;align-items:center;justify-content:center;
+  width:200px;height:90px;border-radius:48px;
+  pointer-events:none; 
+}
+#lips .outer{font-size:64px;transform-origin:center;transition:transform .18s ease}
+#lips.open .outer{animation: chew 0.35s ease-in-out 3;}
+#lips .label{position:absolute;bottom:-20px;font-size:13px;color:#333;opacity:.9}
+
+/* Eating animation */
+@keyframes piece-eat {
+  0%  { transform: translate(0,0) scale(1) rotate(0); opacity:1; }
+  60% { transform: translate(0,-10px) scale(.6) rotate(10deg); opacity:.85; }
+  100%{ transform: translate(0,-30px) scale(0) rotate(30deg); opacity:0; }
+}
+/* Lips chewing */
+@keyframes chew {
+  0%,100% { transform: translateX(-50%) scale(1); }
+  50% { transform: translateX(-50%) scale(1.2) translateY(6px); }
+}
+.eating{animation: piece-eat 700ms cubic-bezier(.2,.9,.2,1) forwards;}
+
+/* Confetti */
+.confetti{
+  position:fixed; width:10px; height:10px; border-radius:50%;
+  pointer-events:none; z-index:80;
+}
+
+@media (max-width:480px){
+  .piece{width:52px;height:52px}
+  .controls button{padding:9px 12px;font-size:14px}
+  #lips{width:160px;height:72px}
+  #lips .outer{font-size:56px}
+}
+</style>
+</head>
+<body>
+
+<div id="lips" aria-hidden="true">
+  <div class="outer">👄</div>
+  <div class="label">Feed me!</div>
+</div>
+
+<div class="wrap">
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 800 600" role="img" aria-label="Decorated cake area">
+      <defs>
+        <radialGradient id="gradCake" cx="40%" cy="30%">
+          <stop offset="0%" stop-color="#ffd7d7"/>
+          <stop offset="100%" stop-color="#ffbfbf"/>
+        </radialGradient>
+      </defs>
+      <ellipse cx="400" cy="380" rx="260" ry="56" fill="#fff" stroke="#eee" stroke-width="2" opacity="0.95" />
+      <g id="cakeGroup" transform="translate(400,260)">
+        <circle id="cakeBody" r="140" fill="var(--cake)" stroke="#c14f4f" stroke-width="4"/>
+        <circle r="140" fill="none" stroke="url(#gradCake)" stroke-width="26" stroke-linecap="round"/>
+        <g id="sprinkles" transform="translate(0,-80)">
+          <circle cx="-30" cy="-4" r="6" fill="#fff"/>
+          <circle cx="26" cy="-14" r="7" fill="#fff8"/>
+          <circle cx="4" cy="-28" r="6" fill="#fff"/>
+        </g>
+        <g id="toppers" transform="translate(-10,-100)">
+          <circle cx="-4" cy="0" r="10" fill="#c81c1c"/>
+          <circle cx="36" cy="-6" r="10" fill="#c81c1c"/>
+          <circle cx="14" cy="-18" r="10" fill="#c81c1c"/>
+        </g>
+      </g>
+      <g id="slices" transform="translate(400,260)"></g>
+      <g id="knife" transform="translate(540,260) rotate(0)" style="pointer-events:none">
+        <rect x="-8" y="-6" width="16" height="48" rx="4" fill="#6b4b3b"/>
+        <path d="M-2 42 L2 42 L72 -8 L60 -14 L-2 36 Z" fill="#dfe8ee" stroke="#b7c3c9" stroke-width="1"/>
+      </g>
+      <line id="guide" x1="400" y1="260" x2="700" y2="260" stroke="#222" stroke-width="2" stroke-dasharray="6 6" opacity="0.06"/>
+    </svg>
+  </div>
+
+  <div class="controls">
+    <button id="cutBtn">Cut Slice</button>
+    <button id="resetBtn" class="secondary">Reset</button>
+  </div>
+
+  <div class="hint">Move the knife (mouse/touch) then press <strong>Cut Slice</strong>. Drag the piece to feed the lips.</div>
+</div>
+
+<script>
+(function(){
+const svg=document.getElementById('svg');
+const knife=document.getElementById('knife');
+const guide=document.getElementById('guide');
+const slicesG=document.getElementById('slices');
+const cutBtn=document.getElementById('cutBtn');
+const resetBtn=document.getElementById('resetBtn');
+const lips=document.getElementById('lips');
+const CX=400,CY=260,CAKE_R=140;
+let lastMove=0,currentAngle=0,sliceIdCounter=0;
+
+// Convert pointer to SVG coords
+function clientToSvg(evt){
+  const p=svg.createSVGPoint();
+  if(evt.touches && evt.touches[0]){p.x=evt.touches[0].clientX;p.y=evt.touches[0].clientY;}
+  else{p.x=evt.clientX;p.y=evt.clientY;}
+  const ctm=svg.getScreenCTM();
+  return ctm?p.matrixTransform(ctm.inverse()):{x:CX,y:CY};
+}
+
+// Move knife
+function updateKnife(evt){
+  const pt=clientToSvg(evt);
+  const dx=pt.x-CX,dy=pt.y-CY;
+  const angle=Math.atan2(dy,dx)*180/Math.PI;
+  currentAngle=angle;
+  const placeDist=CAKE_R-20;
+  const kx=CX+Math.cos(angle*Math.PI/180)*placeDist;
+  const ky=CY+Math.sin(angle*Math.PI/180)*placeDist;
+  knife.setAttribute('transform',`translate(${kx},${ky}) rotate(${angle})`);
+  const endX=CX+Math.cos(angle*Math.PI/180)*400;
+  const endY=CY+Math.sin(angle*Math.PI/180)*400;
+  guide.setAttribute('x1',CX);guide.setAttribute('y1',CY);
+  guide.setAttribute('x2',endX);guide.setAttribute('y2',endY);
+  lastMove=Date.now();
+}
+
+// Wedge path
+function wedgePath(angleDeg,arcDeg=40){
+  const a0=(angleDeg-arcDeg/2)*Math.PI/180;
+  const a1=(angleDeg+arcDeg/2)*Math.PI/180;
+  const x0=Math.cos(a0)*CAKE_R,y0=Math.sin(a0)*CAKE_R;
+  const x1=Math.cos(a1)*CAKE_R,y1=Math.sin(a1)*CAKE_R;
+  const largeArc=arcDeg>180?1:0;
+  return `M 0 0 L ${x0.toFixed(3)} ${y0.toFixed(3)} A ${CAKE_R} ${CAKE_R} 0 ${largeArc} 1 ${x1.toFixed(3)} ${y1.toFixed(3)} Z`;
+}
+
+// Create slice
+function createSvgSlice(angleDeg){
+  const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+  g.setAttribute('data-slice-id',++sliceIdCounter);
+  const base=document.createElementNS('http://www.w3.org/2000/svg','path');
+  base.setAttribute('d',wedgePath(angleDeg,40));
+  base.setAttribute('fill','var(--cake)');
+  base.setAttribute('stroke','#c04b4b');
+  base.setAttribute('stroke-width','1');
+  const frost=document.createElementNS('http://www.w3.org/2000/svg','path');
+  frost.setAttribute('d',wedgePath(angleDeg,40));
+  frost.setAttribute('fill','rgba(255,214,214,0.95)');
+  const bis=angleDeg*Math.PI/180;
+  const tx=Math.cos(bis)*(CAKE_R*0.6);
+  const ty=Math.sin(bis)*(CAKE_R*0.6);
+  const top=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  top.setAttribute('cx',tx.toFixed(2));
+  top.setAttribute('cy',ty.toFixed(2));
+  top.setAttribute('r','8');
+  top.setAttribute('fill','#c63');
+  top.setAttribute('stroke','#900');
+  top.setAttribute('stroke-width','1');
+  g.appendChild(base);g.appendChild(frost);g.appendChild(top);
+  slicesG.appendChild(g);
+  const outD=150;
+  const dx=Math.cos(bis)*outD,dy=Math.sin(bis)*outD;
+  requestAnimationFrame(()=> g.style.transform=`translate(${dx}px,${dy}px)`);
+  spawnConfetti(10,CX+dx,CY+dy); // popper on cut
+  spawnDecoratedPiece(g, dx, dy);
+  return g;
+}
+
+// Spawn piece near cake
+function spawnDecoratedPiece(attachSliceNode, dx, dy){
+  const div=document.createElement('div');
+  div.className='piece';
+  div.innerHTML=`<div class="sprinkles">✨</div><div class="emoji">🍰</div>`;
+  const rect=svg.getBoundingClientRect();
+  div.style.left=(rect.left+CX+dx-32)+'px';
+  div.style.top=(rect.top+CY+dy-32)+'px';
+  div.dataset.sliceId=attachSliceNode.getAttribute('data-slice-id');
+  document.body.appendChild(div);
+
+  let dragging=false,ox=0,oy=0;
+  function start(e){
+    dragging=true;
+    const cx=e.touches?e.touches[0].clientX:e.clientX;
+    const cy=e.touches?e.touches[0].clientY:e.clientY;
+    ox=cx-div.offsetLeft;oy=cy-div.offsetTop;
+    div.style.cursor='grabbing';div.style.transform='translateY(-6px)';
+  }
+  function move(e){
+    if(!dragging) return;
+    e.preventDefault();
+    const cx=e.touches?e.touches[0].clientX:e.clientX;
+    const cy=e.touches?e.touches[0].clientY:e.clientY;
+    div.style.left=(cx-ox)+'px';
+    div.style.top=(cy-oy)+'px';
+    if(checkOverlapWithLips(div)) triggerEat(div);
+  }
+  function end(){dragging=false;div.style.cursor='grab';div.style.transform='';}
+  div.addEventListener('mousedown',start);
+  window.addEventListener('mousemove',move);
+  window.addEventListener('mouseup',end);
+  div.addEventListener('touchstart',start,{passive:false});
+  window.addEventListener('touchmove',move,{passive:false});
+  window.addEventListener('touchend',end);
+  div.addEventListener('dblclick',()=>{if(checkOverlapWithLips(div)) triggerEat(div);});
+}
+
+// Overlap with lips
+function checkOverlapWithLips(el){
+  const pr=el.getBoundingClientRect(),lr=lips.getBoundingClientRect();
+  const px=pr.left+pr.width/2,py=pr.top+pr.height/2;
+  return px>lr.left && px<lr.right && py>lr.top && py<lr.bottom;
+}
+
+// Trigger eat
+function triggerEat(pieceEl){
+  if(pieceEl.classList.contains('eating')) return;
+  pieceEl.classList.add('eating');
+  lips.classList.add('open');
+  spawnConfetti(15,pieceEl.offsetLeft+32,pieceEl.offsetTop+32);
+  const sliceId=pieceEl.dataset.sliceId;
+  setTimeout(()=>{
+    pieceEl.remove();
+    const sliceNode=slicesG.querySelector(`g[data-slice-id="${sliceId}"]`);
+    if(sliceNode) sliceNode.remove();
+    lips.classList.remove('open');
+  },720);
+}
+
+// Confetti
+function spawnConfetti(count,x,y){
+  for(let i=0;i<count;i++){
+    const c=document.createElement('div');
+    c.className='confetti';
+    c.style.background=['#f94144','#f3722c','#f9c74f','#90be6d','#577590'][Math.floor(Math.random()*5)];
+    document.body.appendChild(c);
+    const dx=(Math.random()-0.5)*100;
+    const dy=(Math.random()-0.5)*100-50;
+    const rot=Math.random()*360;
+    c.style.left=x+'px';c.style.top=y+'px';c.style.transform=`rotate(${rot}deg)`;
+    const dur=800+Math.random()*400;
+    c.animate([{transform:`translate(0,0) rotate(${rot}deg)`,opacity:1},{transform:`translate(${dx}px,${dy}px) rotate(${rot+360}deg)`,opacity:0}],{duration:dur,easing:'ease-out'});
+    setTimeout(()=>c.remove(),dur);
+  }
+}
+
+// Cut and reset buttons
+cutBtn.addEventListener('click',()=>{
+  const now=Date.now();
+  if(now-lastMove>2000){cutBtn.animate([{transform:'translateY(0)'},{transform:'translateY(-6px)'},{transform:'translateY(0)'}],{duration:360,iterations:1}); return;}
+  createSvgSlice(currentAngle);
+});
+resetBtn.addEventListener('click',()=>{
+  slicesG.innerHTML='';document.querySelectorAll('.piece').forEach(n=>n.remove());
+});
+
+// Pointer move
+svg.addEventListener('mousemove',updateKnife);
+svg.addEventListener('touchmove',updateKnife,{passive:false});
+svg.addEventListener('touchstart',updateKnife,{passive:false});
+svg.addEventListener('mousedown',updateKnife);
+
+currentAngle=0;
+knife.setAttribute('transform',`translate(${CX+CAKE_R-20},${CY}) rotate(0)`);
+guide.setAttribute('x1',CX);guide.setAttribute('y1',CY);guide.setAttribute('x2',CX+300);guide.setAttribute('y2',CY);
+window.addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault(); cutBtn.click();}});
+})();
+</script>
+</body>
+</html>
